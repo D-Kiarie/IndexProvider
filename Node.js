@@ -1,24 +1,40 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const app = express();
 
 const PORT = process.env.PORT || 10000;
 const SECRET_KEY = process.env.SECRET_KEY;
-const DATA_FILE = path.join(__dirname, 'skin_indices.json');
+const MONGO_URI = process.env.MONGO_URI; // You must set this in Render Environment Variables
 
 if (!SECRET_KEY) {
-    console.error("FATAL ERROR: The SECRET_KEY environment variable is not set on Render.");
+    console.error("FATAL ERROR: SECRET_KEY is missing.");
     process.exit(1);
 }
 
+if (!MONGO_URI) {
+    console.error("FATAL ERROR: MONGO_URI is missing. Please add your MongoDB connection string to Render.");
+    process.exit(1);
+}
+
+// Connect to MongoDB
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('Connected to MongoDB successfully'))
+    .catch(err => {
+        console.error('MongoDB connection error:', err);
+        process.exit(1);
+    });
+
+// Define the data structure (Schema)
+const SkinSchema = new mongoose.Schema({
+    skinName: { type: String, required: true, unique: true },
+    index: { type: Number, default: 0 }
+});
+
+const Skin = mongoose.model('Skin', SkinSchema);
+
 app.use(express.json());
 app.use(cors());
-
-if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({}));
-}
 
 const authMiddleware = (req, res, next) => {
     const apiKey = req.headers['x-api-key'];
@@ -29,44 +45,37 @@ const authMiddleware = (req, res, next) => {
 };
 
 app.get('/health', (req, res) => {
-    res.status(200).send('Server is healthy and running.');
+    // Check database connection state (1 = connected)
+    const dbStatus = mongoose.connection.readyState === 1 ? "Connected" : "Disconnected";
+    res.status(200).send(`Server is running. Database: ${dbStatus}`);
 });
 
 app.use(authMiddleware);
 
 // API controls the numbering logic here
-app.post('/api/get-skin-index', (req, res) => {
+app.post('/api/get-skin-index', async (req, res) => {
     const { skinName } = req.body;
 
     if (!skinName) {
         return res.status(400).json({ error: 'Missing skinName' });
     }
 
-    let data = {};
     try {
-        const fileContent = fs.readFileSync(DATA_FILE, 'utf8');
-        data = JSON.parse(fileContent);
+        // findOneAndUpdate is ATOMIC. It finds the document and adds 1 in a single step.
+        // upsert: true means "create it if it doesn't exist"
+        // new: true means "return the updated number, not the old one"
+        const result = await Skin.findOneAndUpdate(
+            { skinName: skinName },
+            { $inc: { index: 1 } }, 
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+
+        res.json({ index: result.index });
+
     } catch (err) {
-        return res.status(500).json({ error: 'Database error' });
+        console.error("Database Error:", err);
+        return res.status(500).json({ error: 'Failed to generate index' });
     }
-
-    // Initialize if doesn't exist
-    if (!data[skinName]) {
-        data[skinName] = 0;
-    }
-
-    // API calculates the next number
-    data[skinName] += 1;
-    const newIndex = data[skinName];
-
-    try {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-    } catch (err) {
-        return res.status(500).json({ error: 'Failed to save index' });
-    }
-
-    // Send the calculated number back to the game
-    res.json({ index: newIndex });
 });
 
 app.listen(PORT, () => {
