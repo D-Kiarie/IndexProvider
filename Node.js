@@ -34,11 +34,12 @@ app.get('/health', (req, res) => {
 
 app.use(authMiddleware);
 
-app.post('/api/sync-skin-index', (req, res) => {
-    const { skinName, index } = req.body;
+// API controls the numbering logic here
+app.post('/api/get-skin-index', (req, res) => {
+    const { skinName } = req.body;
 
-    if (!skinName || index === undefined) {
-        return res.status(400).json({ error: 'Missing skinName or index' });
+    if (!skinName) {
+        return res.status(400).json({ error: 'Missing skinName' });
     }
 
     let data = {};
@@ -49,7 +50,14 @@ app.post('/api/sync-skin-index', (req, res) => {
         return res.status(500).json({ error: 'Database error' });
     }
 
-    data[skinName] = index;
+    // Initialize if doesn't exist
+    if (!data[skinName]) {
+        data[skinName] = 0;
+    }
+
+    // API calculates the next number
+    data[skinName] += 1;
+    const newIndex = data[skinName];
 
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
@@ -57,7 +65,8 @@ app.post('/api/sync-skin-index', (req, res) => {
         return res.status(500).json({ error: 'Failed to save index' });
     }
 
-    res.json({ success: true, skinName, index });
+    // Send the calculated number back to the game
+    res.json({ index: newIndex });
 });
 
 app.listen(PORT, () => {
