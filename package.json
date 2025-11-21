@@ -1,14 +1,15 @@
 {
   "name": "skin-indexer-api",
   "version": "1.0.0",
-  "description": "Global skin indexing API",
+  "description": "Global skin indexing API with MongoDB",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "mongoose": "^7.0.3"
   },
   "engines": {
     "node": ">=14.0.0"
