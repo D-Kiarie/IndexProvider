@@ -34,11 +34,11 @@ app.get('/health', (req, res) => {
 
 app.use(authMiddleware);
 
-app.post('/api/get-skin-index', (req, res) => {
-    const { skinName } = req.body;
+app.post('/api/sync-skin-index', (req, res) => {
+    const { skinName, index } = req.body;
 
-    if (!skinName) {
-        return res.status(400).json({ error: 'Missing skinName' });
+    if (!skinName || index === undefined) {
+        return res.status(400).json({ error: 'Missing skinName or index' });
     }
 
     let data = {};
@@ -49,12 +49,7 @@ app.post('/api/get-skin-index', (req, res) => {
         return res.status(500).json({ error: 'Database error' });
     }
 
-    if (!data[skinName]) {
-        data[skinName] = 0;
-    }
-
-    data[skinName] += 1;
-    const newIndex = data[skinName];
+    data[skinName] = index;
 
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
@@ -62,7 +57,7 @@ app.post('/api/get-skin-index', (req, res) => {
         return res.status(500).json({ error: 'Failed to save index' });
     }
 
-    res.json({ index: newIndex });
+    res.json({ success: true, skinName, index });
 });
 
 app.listen(PORT, () => {
